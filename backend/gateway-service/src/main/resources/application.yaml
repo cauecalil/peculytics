@@ -4,10 +4,45 @@ server:
 spring:
   application:
     name: gateway-service
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: upload-create-analysis
+              uri: lb://upload-service
+              predicates:
+                - Path=/analyses
+                - Method=POST
+
+            - id: api-list-analyses
+              uri: lb://api-service
+              predicates:
+                - Path=/analyses
+                - Method=GET
+
+            - id: api-analysis-details
+              uri: lb://api-service
+              predicates:
+                - Path=/analyses/{id}
+                - Method=GET
+
+            - id: api-analysis-transactions
+              uri: lb://api-service
+              predicates:
+                - Path=/analyses/{id}/transactions
+                - Method=GET
+
+            - id: api-analysis-summary
+              uri: lb://api-service
+              predicates:
+                - Path=/analyses/{id}/summary
+                - Method=GET
+
 
 eureka:
   client:
     service-url:
-      defaultZone: http://service-registry:8761/eureka/
+      defaultZone: ${SPRING_EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka}
   instance:
     prefer-ip-address: true
