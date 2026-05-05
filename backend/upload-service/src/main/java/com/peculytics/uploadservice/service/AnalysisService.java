@@ -76,7 +76,7 @@ public class AnalysisService {
             StatementFile statementFile = StatementFile.create(
                     analysis,
                     parsedFile.title(),
-                    parsedFile.originalFilename()
+                    parsedFile.fileName()
             );
 
             if (parsedFile.accepted()) {
@@ -113,7 +113,7 @@ public class AnalysisService {
             StatementFile statementFile = StatementFile.create(
                     analysis,
                     parsedFile.title(),
-                    parsedFile.originalFilename()
+                    parsedFile.fileName()
             );
             statementFile.markFailed(parsedFile.errorMessage());
             statementFileRepository.save(statementFile);
@@ -172,30 +172,30 @@ public class AnalysisService {
 
         for (int index = 0; index < request.files().size(); index++) {
             MultipartFile file = request.files().get(index);
-            String originalFilename = originalFilename(file);
-            String title = fileTitle(request.fileTitles(), index, originalFilename);
-            parsedFiles.add(parseFile(file, title, originalFilename));
+            String fileName = fileName(file);
+            String title = fileTitle(request.fileTitles(), index, fileName);
+            parsedFiles.add(parseFile(file, title, fileName));
         }
 
         return parsedFiles;
     }
 
-    private ParsedUploadedFile parseFile(MultipartFile file, String title, String originalFilename) {
+    private ParsedUploadedFile parseFile(MultipartFile file, String title, String fileName) {
         if (file == null || file.isEmpty()) {
-            return ParsedUploadedFile.failed(title, originalFilename, "CSV file must not be empty.", UploadRejectionReason.EMPTY_FILE);
+            return ParsedUploadedFile.failed(title, fileName, "CSV file must not be empty.", UploadRejectionReason.EMPTY_FILE);
         }
 
         if (file.getSize() > MAX_FILE_SIZE_BYTES) {
-            return ParsedUploadedFile.failed(title, originalFilename, "Each CSV file must be at most 5 MB.", UploadRejectionReason.FILE_TOO_LARGE);
+            return ParsedUploadedFile.failed(title, fileName, "Each CSV file must be at most 5 MB.", UploadRejectionReason.FILE_TOO_LARGE);
         }
 
-        if (!isCsvUpload(originalFilename, file.getContentType())) {
-            return ParsedUploadedFile.failed(title, originalFilename, "Only CSV files are accepted.", UploadRejectionReason.UNSUPPORTED_FILE_TYPE);
+        if (!isCsvUpload(fileName, file.getContentType())) {
+            return ParsedUploadedFile.failed(title, fileName, "Only CSV files are accepted.", UploadRejectionReason.UNSUPPORTED_FILE_TYPE);
         }
 
         try {
             UploadedCsvFile uploadedCsvFile = UploadedCsvFile.builder()
-                    .originalFilename(originalFilename)
+                    .fileName(fileName)
                     .content(file.getBytes())
                     .build();
 
@@ -205,7 +205,7 @@ public class AnalysisService {
             if (parsedStatement.transactions().isEmpty()) {
                 return ParsedUploadedFile.failed(
                         title,
-                        originalFilename,
+                        fileName,
                         "CSV file does not contain valid transactions.",
                         UploadRejectionReason.UNSUPPORTED_CSV_FORMAT
                 );
@@ -213,14 +213,14 @@ public class AnalysisService {
 
             return ParsedUploadedFile.accepted(
                     title,
-                    originalFilename,
+                    fileName,
                     parsedStatement.parserName(),
                     parsedStatement.transactions()
             );
         } catch (IOException e) {
-            return ParsedUploadedFile.failed(title, originalFilename, "CSV file could not be read.", UploadRejectionReason.UNSUPPORTED_CSV_FORMAT);
+            return ParsedUploadedFile.failed(title, fileName, "CSV file could not be read.", UploadRejectionReason.UNSUPPORTED_CSV_FORMAT);
         } catch (UnsupportedCsvFormatException e) {
-            return ParsedUploadedFile.failed(title, originalFilename, e.getMessage(), UploadRejectionReason.UNSUPPORTED_CSV_FORMAT);
+            return ParsedUploadedFile.failed(title, fileName, e.getMessage(), UploadRejectionReason.UNSUPPORTED_CSV_FORMAT);
         }
     }
 
@@ -304,7 +304,7 @@ public class AnalysisService {
         return (int) Math.ceil(transactions / (double) BATCH_SIZE);
     }
 
-    private static String fileTitle(List<String> fileTitles, int index, String originalFilename) {
+    private static String fileTitle(List<String> fileTitles, int index, String fileName) {
         if (fileTitles != null) {
             String providedTitle = fileTitles.get(index);
 
@@ -313,7 +313,7 @@ public class AnalysisService {
             }
         }
 
-        return filenameWithoutExtension(originalFilename);
+        return filenameWithoutExtension(fileName);
     }
 
     private static String filenameWithoutExtension(String filename) {
@@ -326,8 +326,10 @@ public class AnalysisService {
         return filename.substring(0, extensionStart);
     }
 
-    private static String originalFilename(MultipartFile file) {
-        if (file == null || file.getOriginalFilename() == null || file.getOriginalFilename().isBlank()) {
+    private static String fileName(MultipartFile file) {
+        if (file.getOriginalFilename() == null) {
+            return "statement.csv";
+        } else if (file.getOriginalFilename().isBlank()) {
             return "statement.csv";
         }
 
@@ -376,7 +378,7 @@ public class AnalysisService {
     @Builder
     private record ParsedUploadedFile(
             String title,
-            String originalFilename,
+            String fileName,
             boolean accepted,
             String parserName,
             List<NormalizedTransaction> transactions,
@@ -391,7 +393,7 @@ public class AnalysisService {
         ) {
             return ParsedUploadedFile.builder()
                     .title(title)
-                    .originalFilename(originalFilename)
+                    .fileName(originalFilename)
                     .accepted(true)
                     .parserName(parserName)
                     .transactions(transactions)
@@ -406,7 +408,7 @@ public class AnalysisService {
         ) {
             return ParsedUploadedFile.builder()
                     .title(title)
-                    .originalFilename(originalFilename)
+                    .fileName(originalFilename)
                     .accepted(false)
                     .transactions(List.of())
                     .errorMessage(errorMessage)

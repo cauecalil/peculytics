@@ -55,19 +55,19 @@ public class StatementFile {
     @Column(name = "completed_at")
     private Instant completedAt;
 
-    public static StatementFile create(Analysis analysis, String title, String originalFilename) {
+    public static StatementFile create(Analysis analysis, String title, String fileName) {
         if (analysis == null) {
             throw new IllegalArgumentException("Analysis cannot be null");
         }
 
         if (title == null || title.isBlank()) {
-            title = originalFilename;
+            title = fileName;
         }
 
         return StatementFile.builder()
                 .analysis(analysis)
                 .title(truncate(title))
-                .fileName(truncate(originalFilename))
+                .fileName(truncate(fileName))
                 .status(StatementFileStatus.PROCESSING)
                 .createdAt(Instant.now())
                 .build();

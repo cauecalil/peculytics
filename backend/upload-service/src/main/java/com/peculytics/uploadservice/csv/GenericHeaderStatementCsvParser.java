@@ -115,7 +115,7 @@ public class GenericHeaderStatementCsvParser implements StatementCsvParser {
             if (transaction.isPresent()) {
                 transactions.add(transaction.get());
             } else {
-                log.warn("Ignoring invalid CSV row {} from file {}", rowNumber, file.originalFilename());
+                log.warn("Ignoring invalid CSV row {} from file {}", rowNumber, file.fileName());
             }
         }
 

@@ -42,7 +42,7 @@ public class CsvStructureDetector {
         }
 
         if (bestDocument == null || bestDocument.headers().size() < 2) {
-            throw new UnsupportedCsvFormatException("CSV structure could not be detected for file: " + file.originalFilename());
+            throw new UnsupportedCsvFormatException("CSV structure could not be detected for file: " + file.fileName());
         }
 
         return bestDocument;
