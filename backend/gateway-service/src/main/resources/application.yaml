@@ -27,6 +27,12 @@ spring:
                 - Path=/analyses/{id}
                 - Method=GET
 
+            - id: api-delete-analysis
+              uri: lb://api-service
+              predicates:
+                - Path=/analyses/{id}
+                - Method=DELETE
+
             - id: api-analysis-transactions
               uri: lb://api-service
               predicates:
