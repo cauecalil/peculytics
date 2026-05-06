@@ -13,6 +13,7 @@
     <modules>
         <module>service-registry</module>
         <module>upload-service</module>
+        <module>categorization-service</module>
         <module>api-service</module>
         <module>gateway-service</module>
     </modules>
