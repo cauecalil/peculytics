@@ -15,6 +15,7 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
+        default_schema: peculytics
         jdbc:
           batch_size: 50
         order_inserts: true

@@ -13,6 +13,9 @@ spring:
     show-sql: false
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: peculytics
 
 eureka:
   client:
