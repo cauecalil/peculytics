@@ -37,8 +37,8 @@ services:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_USER}
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
@@ -48,7 +48,6 @@ services:
   service-registry:
     build:
       context: ./backend
-      target: ${DOCKER_TARGET:-prod}
       args:
         SERVICE_NAME: service-registry
     ports:
@@ -66,10 +65,55 @@ services:
       timeout: 5s
       retries: 5
 
+  upload-service:
+    build:
+      context: ./backend
+      args:
+        SERVICE_NAME: upload-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka
+    depends_on:
+      service-registry:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8081/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  categorization-service:
+    build:
+      context: ./backend
+      args:
+        SERVICE_NAME: categorization-service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+    depends_on:
+      service-registry:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8082/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api-service:
     build:
       context: ./backend
-      target: ${DOCKER_TARGET:-prod}
       args:
         SERVICE_NAME: api-service
     ports:
@@ -91,7 +135,6 @@ services:
   gateway-service:
     build:
       context: ./backend
-      target: ${DOCKER_TARGET:-prod}
       args:
         SERVICE_NAME: gateway-service
     ports:
@@ -101,10 +144,28 @@ services:
     depends_on:
       upload-service:
         condition: service_healthy
+      categorization-service:
+        condition: service_healthy
       api-service:
         condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-http://localhost:8080}
+    depends_on:
+      gateway-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q -O - http://localhost:5173 >/dev/null 2>&1" ]
       interval: 10s
       timeout: 5s
       retries: 5

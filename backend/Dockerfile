@@ -1,16 +1,3 @@
-FROM eclipse-temurin:21-jre-alpine AS dev
-
-WORKDIR /app
-
-RUN apk add --no-cache curl
-
-ARG SERVICE_NAME
-
-COPY ${SERVICE_NAME}/target/*.jar app.jar
-
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
-
-
 FROM maven:3.9-eclipse-temurin-21 AS builder
 
 WORKDIR /workspace
@@ -26,7 +13,7 @@ RUN --mount=type=cache,target=/root/.m2 \
     && cp "$JAR_FILE" /tmp/app.jar
 
 
-FROM eclipse-temurin:21-jre-alpine AS prod
+FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
