@@ -11,7 +11,8 @@ export type TransactionCategory =
 	| 'Shopping'
 	| 'Education'
 	| 'Income'
-	| 'Other';
+	| 'Other'
+	| 'Uncategorized';
 export type CategorySource = 'RULE' | 'AI' | 'FALLBACK' | null;
 
 export interface AnalysisListItem {
@@ -27,7 +28,7 @@ export interface AnalysisListItem {
 export interface StatementFileSummary {
 	id: string;
 	title: string;
-	originalFilename: string;
+	fileName: string;
 	status: StatementFileStatus;
 	totalTransactions: number;
 }

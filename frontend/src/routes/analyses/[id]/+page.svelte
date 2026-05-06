@@ -290,7 +290,7 @@
 						<div class="flex flex-col gap-3 rounded-2xl border border-[color:var(--line)]/60 bg-white/60 p-4 sm:flex-row sm:items-center sm:justify-between">
 							<div>
 								<p class="text-base font-semibold">{file.title}</p>
-								<p class="text-xs text-muted">{file.originalFilename}</p>
+								<p class="text-xs text-muted">{file.fileName}</p>
 							</div>
 							<div class="flex items-center gap-4">
 								<StatusBadge status={file.status} />
