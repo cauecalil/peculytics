@@ -71,7 +71,6 @@ public class AnalysisService {
         analysis = analysisRepository.save(analysis);
 
         List<TransactionBatchMessage> pendingMessages = new ArrayList<>();
-        List<UUID> acceptedStatementFileIds = new ArrayList<>();
         for (ParsedUploadedFile parsedFile : parsedFiles) {
             StatementFile statementFile = StatementFile.create(
                     analysis,
@@ -83,7 +82,6 @@ public class AnalysisService {
                 int fileTotalBatches = batchCount(parsedFile.transactions().size());
                 statementFile.markProcessing(parsedFile.parserName(), parsedFile.transactions().size(), fileTotalBatches);
                 statementFile = statementFileRepository.save(statementFile);
-                acceptedStatementFileIds.add(statementFile.getId());
                 pendingMessages.addAll(batchMessages(analysis, statementFile, parsedFile.transactions(), fileTotalBatches));
             } else {
                 statementFile.markFailed(parsedFile.errorMessage());
@@ -91,7 +89,7 @@ public class AnalysisService {
             }
         }
 
-        publishAfterCommit(pendingMessages, analysis.getId(), acceptedStatementFileIds);
+        publishAfterCommit(pendingMessages, analysis.getId());
 
         return CreateAnalysisResponse.builder()
                 .id(analysis.getId())
@@ -252,20 +250,26 @@ public class AnalysisService {
 
     private void publishAfterCommit(
             List<TransactionBatchMessage> messages,
-            UUID analysisId,
-            List<UUID> acceptedStatementFileIds
+            UUID analysisId
     ) {
         if (messages.isEmpty()) {
             return;
         }
 
         List<TransactionBatchMessage> messagesToPublish = List.copyOf(messages);
-        List<UUID> statementFileIds = List.copyOf(acceptedStatementFileIds);
         Runnable publish = () -> {
+            int publishedMessages = 0;
             try {
-                messagesToPublish.forEach(batchPublisher::publish);
+                for (TransactionBatchMessage message : messagesToPublish) {
+                    batchPublisher.publish(message);
+                    publishedMessages++;
+                }
             } catch (RuntimeException e) {
-                publishFailureHandler.markPublishingFailed(analysisId, statementFileIds, publishFailureMessage(e));
+                List<UUID> unpublishedStatementFileIds = messagesToPublish.subList(publishedMessages, messagesToPublish.size()).stream()
+                        .map(TransactionBatchMessage::statementFileId)
+                        .distinct()
+                        .toList();
+                publishFailureHandler.markPublishingFailed(analysisId, unpublishedStatementFileIds, publishFailureMessage(e));
             }
         };
 

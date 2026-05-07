@@ -29,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -189,6 +190,51 @@ class AnalysisServiceTest {
         );
     }
 
+    @Test
+    void shouldDelegateOnlyUnpublishedStatementFilesWhenLaterBatchPublishFails() {
+        UUID analysisId = UUID.randomUUID();
+        UUID firstStatementFileId = UUID.randomUUID();
+        UUID secondStatementFileId = UUID.randomUUID();
+        mockSavedAnalysisWithId(analysisId);
+        mockSavedStatementFilesWithIds(firstStatementFileId, secondStatementFileId);
+        when(parserResolver.resolve(any(UploadedCsvFile.class))).thenReturn(parser);
+        when(parser.parse(any(UploadedCsvFile.class)))
+                .thenReturn(ParsedStatement.builder()
+                        .parserName("GENERIC_HEADER_CSV")
+                        .transactions(transactions(1))
+                        .build())
+                .thenReturn(ParsedStatement.builder()
+                        .parserName("GENERIC_HEADER_CSV")
+                        .transactions(transactions(1))
+                        .build());
+        org.mockito.Mockito.doNothing()
+                .doThrow(new RuntimeException("second publish failed"))
+                .when(batchPublisher)
+                .publish(any(TransactionBatchMessage.class));
+        CreateAnalysisRequest request = CreateAnalysisRequest.builder()
+                .title("May statement")
+                .files(List.of(
+                        csv("checking.csv", "text/csv"),
+                        csv("credit-card.csv", "text/csv")
+                ))
+                .fileTitles(List.of("Checking account", "Credit card"))
+                .build();
+
+        service.createAnalysis(request);
+
+        ArgumentCaptor<TransactionBatchMessage> messageCaptor = ArgumentCaptor.forClass(TransactionBatchMessage.class);
+        verify(batchPublisher, org.mockito.Mockito.times(2)).publish(messageCaptor.capture());
+        assertThat(messageCaptor.getAllValues())
+                .extracting(TransactionBatchMessage::statementFileId)
+                .containsExactly(firstStatementFileId, secondStatementFileId);
+
+        verify(publishFailureHandler).markPublishingFailed(
+                org.mockito.ArgumentMatchers.eq(analysisId),
+                org.mockito.ArgumentMatchers.eq(List.of(secondStatementFileId)),
+                org.mockito.ArgumentMatchers.contains("second publish failed")
+        );
+    }
+
     private void mockSavedAnalysisWithId(UUID analysisId) {
         when(analysisRepository.save(any(Analysis.class))).thenAnswer(invocation -> {
             Analysis input = invocation.getArgument(0);
@@ -210,6 +256,28 @@ class AnalysisServiceTest {
     private void mockSavedStatementFileWithId(UUID statementFileId) {
         when(statementFileRepository.save(any(StatementFile.class))).thenAnswer(invocation -> {
             StatementFile input = invocation.getArgument(0);
+            return StatementFile.builder()
+                    .id(statementFileId)
+                    .analysis(input.getAnalysis())
+                    .title(input.getTitle())
+                    .fileName(input.getFileName())
+                    .status(input.getStatus())
+                    .totalTransactions(input.getTotalTransactions())
+                    .processedBatches(input.getProcessedBatches())
+                    .totalBatches(input.getTotalBatches())
+                    .parserName(input.getParserName())
+                    .errorMessage(input.getErrorMessage())
+                    .createdAt(input.getCreatedAt())
+                    .completedAt(input.getCompletedAt())
+                    .build();
+        });
+    }
+
+    private void mockSavedStatementFilesWithIds(UUID... statementFileIds) {
+        AtomicInteger index = new AtomicInteger();
+        when(statementFileRepository.save(any(StatementFile.class))).thenAnswer(invocation -> {
+            StatementFile input = invocation.getArgument(0);
+            UUID statementFileId = statementFileIds[index.getAndIncrement()];
             return StatementFile.builder()
                     .id(statementFileId)
                     .analysis(input.getAnalysis())
