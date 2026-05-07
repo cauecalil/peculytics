@@ -20,8 +20,7 @@ handling, idempotency, and local orchestration with Docker Compose.
 - [Core capabilities](#core-capabilities)
 - [Tech Stack](#tech-stack)
 - [Architecture Overview](#architecture-overview)
-- [Main User Flow](#main-user-flow)
-- [Asynchronous Processing Sequence](#asynchronous-processing-sequence)
+- [Processing Flow](#processing-flow)
 - [Services](#services)
 - [Data Ownership](#data-ownership)
 - [RabbitMQ Contract](#rabbitmq-contract)
@@ -67,26 +66,11 @@ handling, idempotency, and local orchestration with Docker Compose.
 
 ```mermaid
 flowchart LR
-    Browser[User Browser] --> Frontend[frontend<br/>SvelteKit]
-    Frontend --> Gateway[gateway-service<br/>Spring Cloud Gateway]
-
-    Gateway --> Upload[upload-service<br/>Create analysis and parse CSV]
-    Gateway --> Api[api-service<br/>Read API and controlled delete]
-
-    Upload --> Database[(PostgreSQL<br/>peculytics schema)]
-    Api --> Database
-
-    Upload --> Queue[[RabbitMQ<br/>transactions.categorize]]
-    Queue --> Categorization[categorization-service<br/>Rules, AI, persistence]
-    Categorization --> Database
-
-    Queue --> DLQ[[RabbitMQ DLQ<br/>transactions.categorize.dlq]]
-    DLQ --> Categorization
-
-    Gateway -. service discovery .-> Eureka[service-registry<br/>Eureka Server]
-    Upload -. registers .-> Eureka
-    Api -. registers .-> Eureka
-    Categorization -. registers .-> Eureka
+    Frontend --> Gateway[Gateway]
+    Gateway --> Upload[Upload Service] --> DB[(PostgreSQL)]
+    Gateway --> Api[API Service] --> DB
+    Upload --> MQ[[RabbitMQ queue]] --> Categorize[Categorization Service] --> DB
+    MQ --> DLQ[[DLQ]] --> Categorize
 ```
 
 ### Why Microservices?
@@ -178,53 +162,30 @@ implementation. The rest of the processing pipeline stays the same: batches are
 consumed, rule-based categorization still runs, unresolved transactions are
 stored as `UNCATEGORIZED / FALLBACK`, and the Analysis can still complete.
 
-## Main User Flow
+## Processing Flow
 
 ```mermaid
-flowchart TD
-    A([User]) --> B[Create Analysis]
-    B --> C[Upload CSV files]
-    C --> D[Validate & parse CSV]
-    D --> E[Publish batches to RabbitMQ]
-    E -->|202 Accepted| RET([Upload complete])
- 
-    E -. async .-> F[Consume batch]
-    F --> G[Apply categorization rules]
-    G --> H[AI fallback if unresolved]
-    H --> I[Persist transactions]
-    I --> J[Analysis status updated]
-```
+flowchart LR
+    subgraph Upload["1. Upload"]
+        A([User]) --> B[Create analysis]
+        B --> C[Upload CSV files]
+        C --> D[Validate & parse CSV]
+        D --> E[[Publish batches]]
+        E --> F([202 Accepted])
+    end
 
-## Asynchronous Processing Sequence
+    subgraph Background["2. Background processing"]
+        E -. async .-> G[Consume batch]
+        G --> H[Categorize transactions]
+        H --> I[Persist results]
+        I --> J[Update status]
+    end
 
-```mermaid
-sequenceDiagram
-    participant UI as Frontend
-    participant GW as Gateway
-    participant UP as upload-service
-    participant DB as PostgreSQL
-    participant MQ as RabbitMQ
-    participant CAT as categorization-service
-    participant API as api-service
-
-    UI->>GW: POST /analyses multipart/form-data
-    GW->>UP: Route create request
-    UP->>DB: Create Analysis and StatementFile rows
-    UP->>UP: Detect CSV structure and normalize rows
-    UP->>MQ: Publish TransactionBatchMessage
-    UP-->>UI: 202 Accepted
-
-    MQ->>CAT: Deliver transaction batch
-    CAT->>DB: Check processed_transaction_batches
-    CAT->>CAT: Apply rule-based categorization
-    CAT->>CAT: Use Gemini or fallback for unresolved items
-    CAT->>DB: Save transactions and processing state
-    CAT-->>MQ: Ack after database transaction commits
-
-    UI->>GW: GET /analyses/{id}
-    GW->>API: Route read request
-    API->>DB: Read Analysis, files, transactions, summary
-    API-->>UI: JSON response
+    subgraph Results["3. Results"]
+        J --> K([User opens analysis])
+        K --> L[Load transactions & summary]
+        L --> M([Show results])
+    end
 ```
 
 ## Services
@@ -321,7 +282,7 @@ and consumer deserialization stay compatible.
 Categorization happens in this order:
 
 ```mermaid
-flowchart TD
+flowchart LR
     batch([Batch received]) --> rules[Apply rule-based categorization]
     rules --> matched{Rule matched?}
  
