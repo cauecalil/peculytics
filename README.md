@@ -182,17 +182,17 @@ stored as `UNCATEGORIZED / FALLBACK`, and the Analysis can still complete.
 
 ```mermaid
 flowchart TD
-    A[User opens the frontend] --> B[Creates an Analysis]
-    B --> C[Uploads one or more CSV files]
-    C --> D[upload-service validates and parses files]
-    D --> E[Transactions are split into batches]
-    E --> F[Batches are published to RabbitMQ]
-    F --> G[categorization-service consumes batches]
-    G --> H[Rules categorize known transactions]
-    H --> I[Unresolved transactions use Gemini or local fallback]
-    I --> J[Categorized transactions are persisted]
-    J --> K[Analysis status is updated]
-    K --> L[Frontend shows transactions and expense summary]
+    A([User]) --> B[Create Analysis]
+    B --> C[Upload CSV files]
+    C --> D[Validate & parse CSV]
+    D --> E[Publish batches to RabbitMQ]
+    E -->|202 Accepted| RET([Upload complete])
+ 
+    E -. async .-> F[Consume batch]
+    F --> G[Apply categorization rules]
+    G --> H[AI fallback if unresolved]
+    H --> I[Persist transactions]
+    I --> J[Analysis status updated]
 ```
 
 ## Asynchronous Processing Sequence
@@ -322,16 +322,20 @@ Categorization happens in this order:
 
 ```mermaid
 flowchart TD
-    A[Transaction batch received] --> B[Rule-based categorization]
-    B --> C{Rule matched?}
-    C -- Yes --> D[Persist category with source RULE]
-    C -- No --> E{Gemini API key configured?}
-    E -- Yes --> F[Call Gemini through LangChain4j]
-    E -- No --> G[Use local fallback categorizer]
-    F --> H{Valid AI response?}
-    H -- Yes --> I[Persist category with source AI]
-    H -- No --> J[Persist UNCATEGORIZED with source FALLBACK]
-    G --> J
+    batch([Batch received]) --> rules[Apply rule-based categorization]
+    rules --> matched{Rule matched?}
+ 
+    matched -->|Yes| saveRule[Save · source: RULE]
+    matched -->|No| hasKey{Gemini key configured?}
+ 
+    hasKey -->|Yes| gemini[Call Gemini via LangChain4j]
+    hasKey -->|No| saveFallback[Save UNCATEGORIZED · source: FALLBACK]
+ 
+    gemini --> valid{Valid AI response?}
+    valid -->|Yes| saveAi[Save · source: AI]
+    valid -->|No| saveFallback
+ 
+    saveRule & saveAi & saveFallback --> done([Transaction stored])
 ```
 
 Rules always have priority over AI. If a transaction matches a rule, it is not
