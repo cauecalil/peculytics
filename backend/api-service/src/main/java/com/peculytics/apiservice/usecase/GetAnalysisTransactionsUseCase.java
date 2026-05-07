@@ -2,6 +2,7 @@ package com.peculytics.apiservice.usecase;
 
 import com.peculytics.apiservice.dto.GetAnalysisTransactionsResponse;
 import com.peculytics.apiservice.exception.AnalysisNotFoundException;
+import com.peculytics.apiservice.exception.InvalidPaginationParameterException;
 import com.peculytics.apiservice.model.Transaction;
 import com.peculytics.apiservice.repository.AnalysisRepository;
 import com.peculytics.apiservice.repository.TransactionRepository;
@@ -23,6 +24,14 @@ public class GetAnalysisTransactionsUseCase {
     private final TransactionRepository transactionRepository;
 
     public GetAnalysisTransactionsResponse execute(UUID analysisId, int page, int size) {
+        if (page < 0) {
+            throw new InvalidPaginationParameterException("Page must be greater than or equal to zero.");
+        }
+
+        if (size <= 0) {
+            throw new InvalidPaginationParameterException("Size must be greater than zero.");
+        }
+
         if (!analysisRepository.existsById(analysisId)) {
             throw new AnalysisNotFoundException(analysisId);
         }

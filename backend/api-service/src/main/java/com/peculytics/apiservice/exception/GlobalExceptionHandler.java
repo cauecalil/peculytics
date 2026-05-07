@@ -31,6 +31,16 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(InvalidPaginationParameterException.class)
+    ProblemDetail handleInvalidPaginationParameter(InvalidPaginationParameterException e) {
+        return problem(
+                HttpStatus.BAD_REQUEST,
+                "invalid-pagination-parameter",
+                "Invalid Pagination Parameter",
+                e.getMessage()
+        );
+    }
+
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleGeneric(Exception e) {
         return problem(

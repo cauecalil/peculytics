@@ -2,6 +2,7 @@ package com.peculytics.apiservice.usecase;
 
 import com.peculytics.apiservice.dto.GetAnalysisTransactionsResponse;
 import com.peculytics.apiservice.exception.AnalysisNotFoundException;
+import com.peculytics.apiservice.exception.InvalidPaginationParameterException;
 import com.peculytics.apiservice.model.StatementFile;
 import com.peculytics.apiservice.model.Transaction;
 import com.peculytics.apiservice.model.TransactionCategory;
@@ -43,7 +44,7 @@ class GetAnalysisTransactionsUseCaseTest {
     private GetAnalysisTransactionsUseCase useCase;
 
     @Test
-    void shouldMapTransactionsAndRequestExpectedPageSort() {
+    void shouldMapTransactionsAndRequestTransactionsWithStatementFileUsingExpectedPageSort() {
         UUID analysisId = UUID.randomUUID();
         Transaction transaction = transaction();
         when(analysisRepository.existsById(analysisId)).thenReturn(true);
@@ -82,6 +83,36 @@ class GetAnalysisTransactionsUseCaseTest {
         assertThat(pageRequest.getSort().getOrderFor("id"))
                 .extracting(Sort.Order::getDirection)
                 .isEqualTo(Sort.Direction.DESC);
+    }
+
+    @Test
+    void shouldRejectNegativePage() {
+        UUID analysisId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> useCase.execute(analysisId, -1, 50))
+                .isInstanceOf(InvalidPaginationParameterException.class)
+                .hasMessage("Page must be greater than or equal to zero.");
+
+        verify(analysisRepository, never()).existsById(org.mockito.ArgumentMatchers.any());
+        verify(transactionRepository, never()).findByAnalysisId(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
+        );
+    }
+
+    @Test
+    void shouldRejectZeroSize() {
+        UUID analysisId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> useCase.execute(analysisId, 0, 0))
+                .isInstanceOf(InvalidPaginationParameterException.class)
+                .hasMessage("Size must be greater than zero.");
+
+        verify(analysisRepository, never()).existsById(org.mockito.ArgumentMatchers.any());
+        verify(transactionRepository, never()).findByAnalysisId(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
+        );
     }
 
     @Test

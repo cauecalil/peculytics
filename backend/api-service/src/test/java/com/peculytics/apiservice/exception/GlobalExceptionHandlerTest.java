@@ -35,6 +35,18 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldReturnBadRequestProblemForInvalidPaginationParameter() {
+        ProblemDetail problem = handler.handleInvalidPaginationParameter(
+                new InvalidPaginationParameterException("Size must be greater than zero.")
+        );
+
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(problem.getType()).isEqualTo(URI.create("urn:peculytics:apiservice:error:invalid-pagination-parameter"));
+        assertThat(problem.getTitle()).isEqualTo("Invalid Pagination Parameter");
+        assertThat(problem.getDetail()).isEqualTo("Size must be greater than zero.");
+    }
+
+    @Test
     void shouldReturnInternalServerErrorProblemForUnexpectedExceptions() {
         ProblemDetail problem = handler.handleGeneric(new RuntimeException("database details"));
 

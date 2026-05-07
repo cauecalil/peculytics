@@ -4,8 +4,8 @@ import com.peculytics.apiservice.model.Transaction;
 import com.peculytics.apiservice.model.TransactionCategory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 public interface TransactionRepository extends JpaRepository<Transaction, UUID> {
+    @EntityGraph(attributePaths = "statementFile")
     Page<Transaction> findByAnalysisId(UUID analysisId, Pageable pageable);
 
     @Query("""
