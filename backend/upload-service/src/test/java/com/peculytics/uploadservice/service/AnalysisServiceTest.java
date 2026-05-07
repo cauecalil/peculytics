@@ -235,6 +235,44 @@ class AnalysisServiceTest {
         );
     }
 
+    @Test
+    void shouldNotMarkPartiallyPublishedStatementFileAsUnpublishedWhenLaterBatchPublishFails() {
+        UUID analysisId = UUID.randomUUID();
+        UUID statementFileId = UUID.randomUUID();
+        mockSavedAnalysisWithId(analysisId);
+        mockSavedStatementFileWithId(statementFileId);
+        when(parserResolver.resolve(any(UploadedCsvFile.class))).thenReturn(parser);
+        when(parser.parse(any(UploadedCsvFile.class))).thenReturn(ParsedStatement.builder()
+                .parserName("GENERIC_HEADER_CSV")
+                .transactions(transactions(51))
+                .build());
+        org.mockito.Mockito.doNothing()
+                .doThrow(new RuntimeException("second batch failed"))
+                .when(batchPublisher)
+                .publish(any(TransactionBatchMessage.class));
+        CreateAnalysisRequest request = CreateAnalysisRequest.builder()
+                .title("May statement")
+                .files(List.of(csv("statement.csv", "text/csv")))
+                .build();
+
+        service.createAnalysis(request);
+
+        ArgumentCaptor<TransactionBatchMessage> messageCaptor = ArgumentCaptor.forClass(TransactionBatchMessage.class);
+        verify(batchPublisher, org.mockito.Mockito.times(2)).publish(messageCaptor.capture());
+        assertThat(messageCaptor.getAllValues())
+                .extracting(TransactionBatchMessage::batchNumber)
+                .containsExactly(1, 2);
+        assertThat(messageCaptor.getAllValues())
+                .extracting(TransactionBatchMessage::statementFileId)
+                .containsExactly(statementFileId, statementFileId);
+
+        verify(publishFailureHandler).markPublishingFailed(
+                org.mockito.ArgumentMatchers.eq(analysisId),
+                org.mockito.ArgumentMatchers.eq(List.of()),
+                org.mockito.ArgumentMatchers.contains("second batch failed")
+        );
+    }
+
     private void mockSavedAnalysisWithId(UUID analysisId) {
         when(analysisRepository.save(any(Analysis.class))).thenAnswer(invocation -> {
             Analysis input = invocation.getArgument(0);

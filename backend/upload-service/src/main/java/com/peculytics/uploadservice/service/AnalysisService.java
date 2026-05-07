@@ -265,8 +265,12 @@ public class AnalysisService {
                     publishedMessages++;
                 }
             } catch (RuntimeException e) {
+                Set<UUID> partiallyPublishedStatementFileIds = messagesToPublish.subList(0, publishedMessages).stream()
+                        .map(TransactionBatchMessage::statementFileId)
+                        .collect(java.util.stream.Collectors.toSet());
                 List<UUID> unpublishedStatementFileIds = messagesToPublish.subList(publishedMessages, messagesToPublish.size()).stream()
                         .map(TransactionBatchMessage::statementFileId)
+                        .filter(statementFileId -> !partiallyPublishedStatementFileIds.contains(statementFileId))
                         .distinct()
                         .toList();
                 publishFailureHandler.markPublishingFailed(analysisId, unpublishedStatementFileIds, publishFailureMessage(e));
