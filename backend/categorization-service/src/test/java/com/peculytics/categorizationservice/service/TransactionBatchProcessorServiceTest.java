@@ -19,8 +19,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -42,6 +45,7 @@ class TransactionBatchProcessorServiceTest {
     void shouldValidateBeforeCategorizingAndPersisting() {
         TransactionBatchMessage message = message();
         Map<Integer, CategorizationResult> results = Map.of(0, result());
+        when(transactionBatchPersistenceService.isProcessed(message)).thenReturn(false);
         when(batchCategorizationService.categorize(message)).thenReturn(results);
 
         service.process(message);
@@ -52,8 +56,23 @@ class TransactionBatchProcessorServiceTest {
                 transactionBatchPersistenceService
         );
         inOrder.verify(transactionBatchMessageValidator).validate(message);
+        inOrder.verify(transactionBatchPersistenceService).isProcessed(message);
         inOrder.verify(batchCategorizationService).categorize(message);
         inOrder.verify(transactionBatchPersistenceService).persistProcessedBatch(message, results);
+    }
+
+    @Test
+    void shouldNotCategorizeOrPersistWhenBatchWasAlreadyProcessed() {
+        TransactionBatchMessage message = message();
+        when(transactionBatchPersistenceService.isProcessed(message)).thenReturn(true);
+
+        service.process(message);
+
+        InOrder inOrder = inOrder(transactionBatchMessageValidator, transactionBatchPersistenceService);
+        inOrder.verify(transactionBatchMessageValidator).validate(message);
+        inOrder.verify(transactionBatchPersistenceService).isProcessed(message);
+        verifyNoInteractions(batchCategorizationService);
+        verify(transactionBatchPersistenceService, never()).persistProcessedBatch(any(), any());
     }
 
     @Test

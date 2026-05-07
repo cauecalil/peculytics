@@ -19,6 +19,10 @@ public class TransactionBatchProcessorService {
     public void process(TransactionBatchMessage message) {
         transactionBatchMessageValidator.validate(message);
 
+        if (transactionBatchPersistenceService.isProcessed(message)) {
+            return;
+        }
+
         Map<Integer, CategorizationResult> results = batchCategorizationService.categorize(message);
         transactionBatchPersistenceService.persistProcessedBatch(message, results);
     }

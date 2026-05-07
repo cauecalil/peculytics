@@ -3,16 +3,19 @@ package com.peculytics.categorizationservice.service;
 import com.peculytics.categorizationservice.categorization.CategorizationResult;
 import com.peculytics.categorizationservice.messaging.TransactionBatchMessage;
 import com.peculytics.categorizationservice.model.Analysis;
+import com.peculytics.categorizationservice.model.ProcessedTransactionBatch;
 import com.peculytics.categorizationservice.model.StatementFile;
 import com.peculytics.categorizationservice.model.StatementFileStatus;
 import com.peculytics.categorizationservice.model.Transaction;
 import com.peculytics.categorizationservice.model.TransactionCategory;
 import com.peculytics.categorizationservice.model.TransactionCategorySource;
 import com.peculytics.categorizationservice.repository.AnalysisRepository;
+import com.peculytics.categorizationservice.repository.ProcessedTransactionBatchRepository;
 import com.peculytics.categorizationservice.repository.StatementFileRepository;
 import com.peculytics.categorizationservice.repository.TransactionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -24,6 +27,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -41,6 +45,9 @@ class TransactionBatchPersistenceServiceTest {
 
     @Mock
     private TransactionRepository transactionRepository;
+
+    @Mock
+    private ProcessedTransactionBatchRepository processedTransactionBatchRepository;
 
     @Mock
     private TransactionFactory transactionFactory;
@@ -100,16 +107,48 @@ class TransactionBatchPersistenceServiceTest {
         List<Transaction> transactions = List.of(mock(Transaction.class));
         when(analysisRepository.findByIdForUpdate(analysisId)).thenReturn(Optional.of(analysis));
         when(statementFileRepository.findByIdForUpdate(statementFileId)).thenReturn(Optional.of(statementFile));
+        when(processedTransactionBatchRepository.existsByAnalysisIdAndStatementFileIdAndBatchNumber(analysisId, statementFileId, 1))
+                .thenReturn(false);
         when(transactionFactory.createAll(message, analysis, statementFile, results)).thenReturn(transactions);
         when(statementFileRepository.countByAnalysisIdAndStatus(analysisId, StatementFileStatus.FAILED)).thenReturn(0L);
 
         service.persistProcessedBatch(message, results);
 
         verify(transactionRepository).saveAll(transactions);
+        ArgumentCaptor<ProcessedTransactionBatch> processedBatchCaptor = ArgumentCaptor.forClass(ProcessedTransactionBatch.class);
+        verify(processedTransactionBatchRepository).save(processedBatchCaptor.capture());
+        ProcessedTransactionBatch processedBatch = processedBatchCaptor.getValue();
+        assertThat(processedBatch.getAnalysis()).isSameAs(analysis);
+        assertThat(processedBatch.getStatementFile()).isSameAs(statementFile);
+        assertThat(processedBatch.getBatchNumber()).isEqualTo(1);
+        assertThat(processedBatch.getCreatedAt()).isNotNull();
         verify(statementFile).registerProcessedBatch();
         verify(analysis).registerProcessedBatch(false);
         verify(statementFileRepository).save(statementFile);
         verify(analysisRepository).save(analysis);
+    }
+
+    @Test
+    void shouldSkipAlreadyProcessedBatchWithoutSavingTransactionsOrUpdatingProcessedBatchState() {
+        UUID analysisId = UUID.randomUUID();
+        UUID statementFileId = UUID.randomUUID();
+        TransactionBatchMessage message = message(analysisId, statementFileId);
+        Analysis analysis = analysis(analysisId);
+        StatementFile statementFile = statementFile(analysis);
+        when(analysisRepository.findByIdForUpdate(analysisId)).thenReturn(Optional.of(analysis));
+        when(statementFileRepository.findByIdForUpdate(statementFileId)).thenReturn(Optional.of(statementFile));
+        when(processedTransactionBatchRepository.existsByAnalysisIdAndStatementFileIdAndBatchNumber(analysisId, statementFileId, 1))
+                .thenReturn(true);
+
+        service.persistProcessedBatch(message, results());
+
+        verifyNoInteractions(transactionRepository, transactionFactory);
+        verify(processedTransactionBatchRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(statementFile, never()).registerProcessedBatch();
+        verify(analysis, never()).registerProcessedBatch(org.mockito.ArgumentMatchers.anyBoolean());
+        verify(statementFileRepository, never()).countByAnalysisIdAndStatus(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(statementFileRepository, never()).save(statementFile);
+        verify(analysisRepository, never()).save(analysis);
     }
 
     private static Analysis analysis(UUID id) {
