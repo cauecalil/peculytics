@@ -171,14 +171,39 @@ public class GenericHeaderStatementCsvParser implements StatementCsvParser {
             return parsedAmount;
         }
 
-        Optional<BigDecimal> debit = moneyParser.parse(row.get(mapping.debitHeader()));
+        Optional<BigDecimal> debit = parseAmountColumn(row, mapping.debitHeader());
+        Optional<BigDecimal> credit = parseAmountColumn(row, mapping.creditHeader());
 
-        if (debit.isPresent()) {
+        boolean hasNonZeroDebit = debit.filter(GenericHeaderStatementCsvParser::isNonZero).isPresent();
+        boolean hasNonZeroCredit = credit.filter(GenericHeaderStatementCsvParser::isNonZero).isPresent();
+
+        if (hasNonZeroDebit && hasNonZeroCredit) {
+            return Optional.empty();
+        }
+
+        if (hasNonZeroDebit) {
             return Optional.of(debit.get().abs().negate());
         }
 
-        return moneyParser.parse(row.get(mapping.creditHeader()))
-                .map(BigDecimal::abs);
+        if (hasNonZeroCredit) {
+            return Optional.of(credit.get().abs());
+        }
+
+        return debit
+                .map(amount -> amount.abs().negate())
+                .or(() -> credit.map(BigDecimal::abs));
+    }
+
+    private Optional<BigDecimal> parseAmountColumn(Map<String, String> row, String header) {
+        if (header == null) {
+            return Optional.empty();
+        }
+
+        return moneyParser.parse(row.get(header));
+    }
+
+    private static boolean isNonZero(BigDecimal amount) {
+        return amount.compareTo(BigDecimal.ZERO) != 0;
     }
 
     private static HeaderMapping resolveHeaders(List<String> headers) {

@@ -99,6 +99,29 @@ class GenericHeaderStatementCsvParserTest {
         assertThat(statement.transactions().get(1).amount()).isEqualByComparingTo(new BigDecimal("25.00"));
     }
 
+    @Test
+    void shouldResolveZeroDebitOrCreditAndIgnoreAmbiguousDebitCreditRows() {
+        UploadedCsvFile file = uploadedFile();
+        CsvDocument document = CsvDocument.builder()
+                .delimiter(';')
+                .headers(List.of("data", "descricao", "debito", "credito"))
+                .rows(List.of(
+                        row("data", "06/05/2026", "descricao", "Refund", "debito", "0,00", "credito", "25,00"),
+                        row("data", "07/05/2026", "descricao", "Rent", "debito", "25,00", "credito", "0,00"),
+                        row("data", "08/05/2026", "descricao", "Ambiguous", "debito", "10,00", "credito", "25,00")
+                ))
+                .build();
+        when(structureDetector.detect(file)).thenReturn(document);
+
+        ParsedStatement statement = parser.parse(file);
+
+        assertThat(statement.transactions()).hasSize(2);
+        assertThat(statement.transactions().get(0).description()).isEqualTo("Refund");
+        assertThat(statement.transactions().get(0).amount()).isEqualByComparingTo(new BigDecimal("25.00"));
+        assertThat(statement.transactions().get(1).description()).isEqualTo("Rent");
+        assertThat(statement.transactions().get(1).amount()).isEqualByComparingTo(new BigDecimal("-25.00"));
+    }
+
     private static UploadedCsvFile uploadedFile() {
         return UploadedCsvFile.builder()
                 .fileName("statement.csv")
